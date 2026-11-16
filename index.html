@@ -2367,7 +2367,8 @@ async function keepAwake(on){try{if(on&&navigator.wakeLock){wake=await navigator
 function mk(code,fmt){
   const s=document.createElementNS(NS,'svg');
   const o={width:2.5,height:100,margin:0,displayValue:false,background:'transparent'};
-  try{JsBarcode(s,code,{...o,format:fmt})}catch(e){try{JsBarcode(s,code,{...o,format:'CODE128'})}catch(e2){return null}}
+  const f=(fmt==='CODE128'&&/\D/.test(code))?'CODE128B':fmt;
+  try{JsBarcode(s,code,{...o,format:f})}catch(e){try{JsBarcode(s,code,{...o,format:'CODE128'})}catch(e2){return null}}
   const W=parseFloat(s.getAttribute('width')),H=parseFloat(s.getAttribute('height'));
   s.removeAttribute('width');s.removeAttribute('height');s.removeAttribute('style');
   s.setAttribute('viewBox',`0 0 ${W} ${H}`);s.setAttribute('preserveAspectRatio','none');
@@ -2378,7 +2379,7 @@ function qrSVG(text){try{const q=qrcode(0,'M');q.addData(text);q.make();const n=
   return `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" style="width:100%;height:100%"><path d="${d}" fill="#111"/></svg>`}catch(e){return ''}}
 
 // ===== 實體卡複製畫面 =====
-const CW=1374,CH=868,RED='#b3333c';
+const CW=1374,CH=868,RED='#b3333c',DEFQR='http://www.7-11.com.tw/service/card.asp';
 const T=(x,y,w,fs,h,o='')=>`<div class="t${o.includes('j')?' j':''}" style="left:${x}px;top:${y-17}px;width:${w}px;font-size:${fs}px;${o.includes('r')?'color:'+RED+';':''}${o.includes('b')?'font-weight:700;':''}"><span class="m">${h}</span></div>`;
 const DOT=(x,y)=>`<i class="dt" style="left:${x-5}px;top:${y-5}px"></i>`;
 const rd=s=>`<span style="color:${RED}">${s}</span>`;
@@ -2405,7 +2406,7 @@ function replicaHTML(c){
   // 條碼
   h+=`<div class="bc b1" style="left:40px;top:477px;width:783px;height:96px"></div>`+T(120,616,590,37,esc(c.code),'j');
   if(c.code2)h+=`<div class="bc b2" style="left:40px;top:718px;width:785px;height:75px"></div>`;
-  if(c.qr)h+=`<div class="qr">${qrSVG(c.qr)}</div>`+T(1176,662,180,21,'掃描QR')+T(1176,687,180,21,'了解商品卡');
+  h+=`<div class="qr">${qrSVG(c.qr||DEFQR)}</div>`+T(1176,662,180,21,'掃描QR')+T(1176,687,180,21,'了解商品卡');
   return `<div class="rcw"><div class="rc">${h}</div></div>`;
 }
 function sizeRep(host,w){const s=w/CW,r=host.firstChild;r.style.width=w+'px';r.style.height=CH*s+'px';r.firstChild.style.transform=`scale(${s})`}
@@ -2450,8 +2451,9 @@ function render(){
     $('#imp').onclick=()=>{const t=prompt('貼上備份資料（會取代目前所有資料）');if(!t)return;try{const d=JSON.parse(t);if(!Array.isArray(d))throw 0;cards=d;save();render()}catch(e){alert('備份資料格式不正確')}};
   }
   else if(view==='add'){
-    hd.innerHTML='<button id="bk">←</button>新增商品卡';
-    const fo='<option>CODE128</option><option>CODE39</option><option>EAN13</option><option>EAN8</option><option>ITF</option><option>UPC</option><option>codabar</option>';
+    const ed=cards.find(x=>x.id===cur);
+    hd.innerHTML='<button id="bk">←</button>'+(ed?'編輯商品卡':'新增商品卡');
+    const fo='<option>CODE128</option><option>CODE128B</option><option>CODE128A</option><option>CODE39</option><option>EAN13</option><option>EAN8</option><option>ITF</option><option>UPC</option><option>codabar</option>';
     app.innerHTML=`<video id="vid" playsinline muted hidden></video>
 <label>名稱</label><input id="nm" placeholder="例：7-11 商品卡 500">
 <label>面額（元，印在卡上的，可留空＝目前餘額）</label><input id="fc" type="number" inputmode="numeric">
@@ -2460,18 +2462,21 @@ function render(){
 <label>條碼二（另一條，沒有就留空）</label><input id="cd2" autocomplete="off">
 <div class="row"><select id="fm2">${fo}</select><button class="s" id="sc2" style="margin:4px 0 10px">📷 掃描條碼二</button></div>
 <p class="mut" style="margin-top:-4px">掃描時請讓鏡頭只對準其中一條條碼。格式會自動判斷。</p>
-<label>QR Code（選填，卡片右下角那個，會顯示在卡面上）</label><input id="cd3" autocomplete="off"><button class="s" id="sc3" style="width:100%;margin:0 0 10px">📷 掃描 QR Code</button>
+<label>QR Code（選填；不掃的話會自動使用卡上相同的說明連結）</label><input id="cd3" autocomplete="off"><button class="s" id="sc3" style="width:100%;margin:0 0 10px">📷 掃描 QR Code</button>
 <label>目前餘額（元）</label><input id="bl" type="number" inputmode="numeric">
 <label>發行日（選填）</label><input id="is" placeholder="2026/01/01">
 <label>保證期間（選填）</label><input id="pd" placeholder="2026/01/01~2027/03/31">
 <button class="p" id="sv">儲存</button>`;
+    if(ed){$('#nm').value=ed.name;$('#fc').value=ed.face||'';$('#cd1').value=ed.code;$('#fm1').value=ed.format;$('#cd2').value=ed.code2||'';$('#fm2').value=ed.format2||'CODE128';$('#cd3').value=ed.qr||'';$('#bl').value=ed.balance;$('#is').value=ed.issue||'';$('#pd').value=ed.period||''}
     $('#bk').onclick=()=>history.back();
     $('#sc1').onclick=()=>startScan(1);$('#sc2').onclick=()=>startScan(2);$('#sc3').onclick=()=>startScan(3);
     $('#sv').onclick=()=>{
       const code=$('#cd1').value.trim(),bal=Number($('#bl').value);
       if(!code){alert('請輸入或掃描條碼一');return}
       if($('#bl').value===''||!(bal>=0)){alert('請輸入餘額');return}
-      cards.push({id:String(Date.now()),name:$('#nm').value.trim()||'商品卡',face:$('#fc').value.trim(),code,format:$('#fm1').value,code2:$('#cd2').value.trim(),qr:$('#cd3').value.trim(),format2:$('#fm2').value,issue:$('#is').value.trim(),period:$('#pd').value.trim(),balance:bal,initial:bal,log:[]});
+      const nv={name:$('#nm').value.trim()||'商品卡',face:$('#fc').value.trim(),code,format:$('#fm1').value,code2:$('#cd2').value.trim(),qr:$('#cd3').value.trim(),format2:$('#fm2').value,issue:$('#is').value.trim(),period:$('#pd').value.trim()};
+      if(ed){Object.assign(ed,nv);if(bal!==ed.balance){ed.log.push({t:Date.now(),amt:bal-ed.balance,after:bal});ed.balance=bal}}
+      else cards.push({id:String(Date.now()),...nv,balance:bal,initial:bal,log:[]});
       save();history.back();
     };
   }
@@ -2482,13 +2487,13 @@ function render(){
     app.innerHTML=`<button class="p" id="zm1">🔍 放大條碼（給店員掃描）</button><div id="pv"></div>
 <div class="mut" style="text-align:center">剩餘金額</div><div class="big">${money(c.balance)}</div>
 <div class="card"><label>本次使用金額（元）</label><div class="row"><input id="amt" type="number" inputmode="numeric" style="flex:2"><button class="p" id="use" style="flex:1;margin:4px 0 10px">扣除</button></div>
-<button class="s" id="fix" style="width:100%">修正餘額</button></div>
+<div class="row"><button class="s" id="fix">修正餘額</button><button class="s" id="edt">編輯卡片資料</button></div></div>
 <div class="card"><b>使用紀錄</b>${c.log.length?c.log.slice().reverse().map(l=>`<div class="log"><span>${new Date(l.t).toLocaleString('zh-TW',{hour12:false})}</span><span>${l.amt<0?'-':'+'}${money(Math.abs(l.amt))} → ${money(l.after)}</span></div>`).join(''):'<p class="mut">尚無紀錄</p>'}
 ${c.log.length?'<button class="s" id="undo" style="margin-top:10px">復原上一筆</button>':''}</div>
 <button class="s d" id="del" style="width:100%">刪除這張卡</button>`;
     mountReplica($('#pv'),c,Math.min(innerWidth-28,520));
     $('#bk').onclick=()=>history.back();
-    $('#zm1').onclick=()=>zoom(c);$('#pv').onclick=()=>zoom(c);
+    $('#edt').onclick=()=>go('add',c.id);$('#zm1').onclick=()=>zoom(c);$('#pv').onclick=()=>zoom(c);
     $('#use').onclick=()=>{const a=Number($('#amt').value);if(!(a>0))return alert('請輸入金額');if(a>c.balance&&!confirm('金額大於餘額，確定要扣除嗎？'))return;c.balance-=a;c.log.push({t:Date.now(),amt:-a,after:c.balance});save();render()};
     $('#fix').onclick=()=>{const v=prompt('輸入正確的剩餘金額',c.balance);if(v===null||v===''||isNaN(v))return;const n=Number(v);c.log.push({t:Date.now(),amt:n-c.balance,after:n});c.balance=n;save();render()};
     const u=$('#undo');if(u)u.onclick=()=>{const l=c.log.pop();c.balance-=l.amt;save();render()};
@@ -2508,7 +2513,7 @@ async function startScan(slot){
   const loop=async()=>{
     if(!stream)return;
     try{const r=(await det.detect(v)).filter(x=>x.rawValue&&x.rawValue!==other());
-      if(r.length){$('#cd'+slot).value=r[0].rawValue;const f=$('#fm'+slot);if(f)f.value=FMT[r[0].format]||'CODE128';stopScan();v.hidden=true;navigator.vibrate&&navigator.vibrate(80);return}}catch(e){}
+      if(r.length){$('#cd'+slot).value=r[0].rawValue;const f=$('#fm'+slot);let fv=FMT[r[0].format]||'CODE128';if(fv==='CODE128'&&/\D/.test(r[0].rawValue))fv='CODE128B';if(f)f.value=fv;stopScan();v.hidden=true;navigator.vibrate&&navigator.vibrate(80);return}}catch(e){}
     setTimeout(loop,200)};
   loop();
 }
